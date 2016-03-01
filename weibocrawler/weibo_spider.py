@@ -1,0 +1,72 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Tue Dec 15 15:00:27 2015
+
+@author: YungLeChao
+"""
+
+#tip:
+#1.target site:http://3g.sina.com.cn/prog/wapsite/sso/,where you need to sign in
+#2.parse:BeautifulSoup,which is awesome
+#3.result:log in and reach your homepage,it is your work to decide what to scrap
+
+from bs4 import BeautifulSoup
+import urllib.request as urllib2
+import urllib
+import http.cookiejar
+import re
+import pymysql
+
+from connect2MySQl import MySQLConnector
+
+cj = http.cookiejar.CookieJar()
+opener = urllib2.build_opener(urllib2.HTTPCookieProcessor(cj))
+urllib2.install_opener(opener)
+headers  = {'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/45.0.2454.85 Safari/537.36'}
+#get the random infomation,include action,passwd and vk
+url = 'http://login.weibo.cn/login/?ns=1&amp;revalid=2&amp;backURL=http%3A%2F%2Fweibo.cn%2F&amp;backTitle=%CE%A2%B2%A9&amp;vt='
+
+loginInfo = ''
+try:
+    rep = urllib2.Request(url, headers=headers)
+    loginInfo = urllib2.urlopen(rep).read()
+except:
+    print('Login wrong')
+
+soup = BeautifulSoup(loginInfo)
+randomActionName=soup.form['action']
+randomVkValue=soup.find(attrs={'name':'vk'})['value']
+randomPasswdName=soup.find(attrs={'type':'password'})['name']
+#url='http://3g.sina.com.cn/prog/wapsite/sso/' + randomActionName
+data={"mobile":"yourID",
+
+      randomPasswdName:'passwd',
+      'remember': 'on',
+      'backURL': 'http://weibo.cn/',
+      'vk': randomVkValue,
+      'backTitle': '手机新浪网',
+      'submit':'登录'}
+postData=urllib.parse.urlencode(data).encode()
+req=urllib2.Request(url,postData,headers)
+jumpPage = urllib2.urlopen(req).read()
+#print (jumpPage.decode())
+soupIndex = BeautifulSoup(jumpPage)
+
+##Connect to MySQL
+MySQLConn = MySQLConnector('root', 'root', 'lesson')
+
+##connect2MySQl.updateDB(conn, cur, "use weibo")
+for tag1,tag2 in zip(soupIndex.find_all('a', 'nk'),
+                     soupIndex.find_all('span','ctt')):
+    try:
+        sqlQuery="select * from weibo where post='{}'".format(tag2.text[1:])
+        if MySQLConn.cur.execute(sqlQuery):
+            print('重复的微博')
+        else:
+            MySQLConn.insert_to_Table(tag1.string,
+                                      tag1['href'],
+                                      tag2.text[1:])
+    except:
+        continue
+
+MySQLConn.close_Conn()
